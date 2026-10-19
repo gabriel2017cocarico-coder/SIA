@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+backend/.venv/
+
+/respaldo-sia-*.bundle
+/.sia-respaldo/
+/backend/private/
+/backend/test-sia.log
+
+/backend/db.sqlite3
+/backend/media/
+/backend/private/
+/backend/*.log
+/tmp/
+/tools/
