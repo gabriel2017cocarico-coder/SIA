@@ -594,6 +594,23 @@ class SolicitudCompraViewSet(
         faltantes = documentos_faltantes(solicitud)
         if faltantes:
             return Response({"detalle": "Complete el expediente antes de aprobar: " + ", ".join(faltantes) + "."}, status=400)
+
+        # ==========================================================
+        # REGLA 02: Tres cotizaciones para compras mayores a Bs 500
+        # ==========================================================
+        if solicitud.monto_estimado and solicitud.monto_estimado > Decimal('500'):
+            cotizaciones = solicitud.cotizaciones.all()
+            if cotizaciones.count() < 3:
+                return Response(
+                    {'detalle': 'Toda compra mayor a Bs. 500 debe adjuntar tres cotizaciones de proveedores distintos antes de poder enviarse a aprobación.'},
+                    status=400,
+                )
+            proveedores = {c.proveedor.strip().lower() for c in cotizaciones}
+            if len(proveedores) < 3:
+                return Response(
+                    {'detalle': 'Las cotizaciones deben ser de al menos tres proveedores distintos.'},
+                    status=400,
+                )
         return self._transicion(request, solicitud, "EVALUAR_EXPEDIENTE", ["CREADO_PENDIENTE_DAF"], "EVALUADO_PENDIENTE_CERTIFICACION", "EVALUAR_PRESUPUESTO", "La solicitud califica presupuestariamente.")
 
     @action(detail=True, methods=["post"], url_path="certificar-daf")
