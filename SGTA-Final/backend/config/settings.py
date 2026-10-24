@@ -54,6 +54,8 @@ ALLOWED_HOSTS = [
 ]
 
 if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    USE_X_FORWARDED_HOST = True
     # Solo se activan bajo HTTPS real; en desarrollo (DEBUG=True)
     # forzarlas rompería el servidor local por HTTP.
     SECURE_SSL_REDIRECT = True
@@ -157,7 +159,20 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # BASE DE DATOS
 # ==========================================================
 
-DATABASES = {
+# Configuración dinámica de Base de Datos (PostgreSQL en VM2 / SQLite fallback)
+if os.environ.get('DB_NAME'):
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.environ.get('DB_NAME', 'sia'),
+            'USER': os.environ.get('DB_USER', 'sia'),
+            'PASSWORD': os.environ.get('DB_PASSWORD', ''),
+            'HOST': os.environ.get('DB_HOST', '127.0.0.1'),
+            'PORT': os.environ.get('DB_PORT', '5432'),
+        }
+    }
+else:
+    DATABASES = {
     'default': {
         'ENGINE':
             'django.db.backends.sqlite3',

@@ -605,6 +605,16 @@ class TicketViewSet(
             extra["categoria"] = categoria_defecto
 
 
+        # ==========================================================
+        # R03 - PRIORIDAD ALTA AUTOMATICA POR CATEGORIA
+        # Si la categoria del ticket es RED o SERVIDORES,
+        # la prioridad se fuerza a ALTA sin importar el payload.
+        # ==========================================================
+        _cat_obj = extra.get("categoria") or serializer.validated_data.get("categoria")
+        if _cat_obj and hasattr(_cat_obj, "codigo") and _cat_obj.codigo in ("RED", "SERVIDORES"):
+            extra["prioridad"] = "ALTA"
+
+
         ticket = serializer.save(**extra)
 
 
