@@ -135,11 +135,12 @@ def _categoria_por_defecto():
 #
 # ==========================================================
 
+# R04 - SLA segun prioridad: Alta 4h, Media 24h, Baja 72h
 SLA_POR_PRIORIDAD = {
     "CRITICA": 4,
-    "ALTA": 8,
+    "ALTA": 4,
     "MEDIA": 24,
-    "BAJA": 48,
+    "BAJA": 72,
 }
 
 

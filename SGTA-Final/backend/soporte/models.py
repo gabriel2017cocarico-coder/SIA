@@ -227,6 +227,12 @@ class Ticket(models.Model):
         help_text="Fecha y hora límite de atención según SLA."
     )
 
+    fecha_limite = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Fecha y hora límite de atención según SLA (R04: Alta 4h, Media 24h, Baja 72h)."
+    )
+
     sla_cumplido = models.BooleanField(
         null=True,
         blank=True,

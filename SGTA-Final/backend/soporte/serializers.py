@@ -286,6 +286,7 @@ class TicketSerializer(
             "sla_horas",
 
             "sla_fecha_limite",
+            "fecha_limite",
 
             "sla_cumplido",
 
@@ -482,6 +483,7 @@ class TicketSerializer(
             "sla_horas",
 
             "sla_fecha_limite",
+            "fecha_limite",
 
             "sla_cumplido",
 
@@ -1234,6 +1236,15 @@ class TicketSerializer(
         if _cat_obj and hasattr(_cat_obj, "codigo") and _cat_obj.codigo in ("RED", "SERVIDORES"):
             prioridad_val = "ALTA"
 
+        # R04 - Calculo automatico de SLA al crear ticket (Alta 4h, Media 24h, Baja 72h)
+        sla_horas = None
+        sla_fecha_limite = None
+        if prioridad_val:
+            from datetime import timedelta
+            sla_horas = {"CRITICA": 4, "ALTA": 4, "MEDIA": 24, "BAJA": 72}.get(prioridad_val)
+            if sla_horas:
+                sla_fecha_limite = timezone.now() + timedelta(hours=sla_horas)
+
         ticket = (
             Ticket.objects.create(
 
@@ -1245,9 +1256,11 @@ class TicketSerializer(
 
                 prioridad=prioridad_val,
 
-                sla_horas=None,
+                sla_horas=sla_horas,
 
-                sla_fecha_limite=None,
+                sla_fecha_limite=sla_fecha_limite,
+
+                fecha_limite=sla_fecha_limite,
 
                 sla_cumplido=None,
 
