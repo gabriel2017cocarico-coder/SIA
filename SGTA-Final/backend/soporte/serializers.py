@@ -1228,6 +1228,12 @@ class TicketSerializer(
         # CREAR
         # ==========================================================
 
+        # R03: Prioridad alta automática para RED o SERVIDORES
+        prioridad_val = validated_data.pop("prioridad", None)
+        _cat_obj = validated_data.get("categoria")
+        if _cat_obj and hasattr(_cat_obj, "codigo") and _cat_obj.codigo in ("RED", "SERVIDORES"):
+            prioridad_val = "ALTA"
+
         ticket = (
             Ticket.objects.create(
 
@@ -1237,17 +1243,7 @@ class TicketSerializer(
 
                 estado=estado_nuevo,
 
-                # ==========================================
-                # EL SOLICITANTE NO DEFINE:
-                #
-                # - prioridad
-                # - SLA
-                # - responsable
-                # - estado
-                #
-                # ==========================================
-
-                prioridad=None,
+                prioridad=prioridad_val,
 
                 sla_horas=None,
 
