@@ -55,6 +55,35 @@ def es_admin(usuario):
     )
 
 
+def es_jefe_administrativo_usuario(usuario):
+    if not usuario or not usuario.is_authenticated:
+        return False
+    if usuario.is_superuser:
+        return True
+    if usuario.groups.filter(name__iexact="Jefe administrativo").exists():
+        return True
+    roles = obtener_roles(usuario)
+    if any(r in ("JEFE_ADMINISTRATIVO", "JEFE_DAF", "ADMIN", "JEFE_UTIC") for r in roles):
+        return True
+    return False
+
+
+def validar_regla_08_aprobacion(solicitud, usuario):
+    """
+    R08: Compras mayores a Bs 300 solo las aprueba un usuario del grupo
+    Jefe administrativo, y nadie aprueba su propia compra.
+    """
+    if solicitud.solicitante and usuario and solicitud.solicitante.id == usuario.id:
+        return False, "No puede aprobar su propia solicitud de compra.", status.HTTP_403_FORBIDDEN
+
+    monto = solicitud.monto_estimado or Decimal("0")
+    if monto > Decimal("300"):
+        if not es_jefe_administrativo_usuario(usuario):
+            return False, "Las compras mayores a Bs 300 solo pueden ser aprobadas por un usuario del grupo Jefe administrativo.", status.HTTP_403_FORBIDDEN
+
+    return True, "", status.HTTP_200_OK
+
+
 def tiene_permiso(usuario, codigo_permiso):
     """Autorización real de Compras: sigue el mismo patrón de
     Permiso/RolPermiso ya usado en Soporte, en vez de comprobar
@@ -297,7 +326,7 @@ class SolicitudCompraViewSet(
         # recibe directamente la solicitud de compra (no existe una
         # jefatura que se la asigne previamente), así que ve la misma
         # bandeja que el resto de los actores del proceso.
-        if tiene_permiso(usuario, "VER_COMPRAS"):
+        if tiene_permiso(usuario, "VER_COMPRAS") or es_jefe_administrativo_usuario(usuario) or self.action in ('aprobar', 'evaluar_daf', 'visto_bueno_director'):
             return queryset
 
 
@@ -596,6 +625,13 @@ class SolicitudCompraViewSet(
             return Response({"detalle": "Complete el expediente antes de aprobar: " + ", ".join(faltantes) + "."}, status=400)
 
         # ==========================================================
+        # REGLA 08: Aprobación por Jefe administrativo y no auto-aprobación
+        # ==========================================================
+        ok_r08, err_r08, status_r08 = validar_regla_08_aprobacion(solicitud, request.user)
+        if not ok_r08:
+            return Response({"detalle": err_r08}, status=status_r08)
+
+        # ==========================================================
         # REGLA 02: Tres cotizaciones para compras mayores a Bs 500
         # ==========================================================
         if solicitud.monto_estimado and solicitud.monto_estimado > Decimal('500'):
@@ -640,9 +676,49 @@ class SolicitudCompraViewSet(
 
     @action(detail=True, methods=["post"], url_path="visto-bueno-director")
     def visto_bueno_director(self, request, pk=None):
-        # Igual que certificar-daf: al dar el visto bueno, el expediente
-        # queda automáticamente disponible para Tesorería (desembolso).
-        return self._transicion(request, self.get_object(), "DAR_VISTO_BUENO", ["VERIFICADO_PENDIENTE_AUTORIZACION"], "APROBADO_PARA_DESEMBOLSO", "VISTO_BUENO_DIRECTOR", "Director autorizó; expediente derivado automáticamente a Tesorería para desembolso.")
+        solicitud = self.get_object()
+        ok_r08, err_r08, status_r08 = validar_regla_08_aprobacion(solicitud, request.user)
+        if not ok_r08:
+            return Response({"detalle": err_r08}, status=status_r08)
+        return self._transicion(request, solicitud, "DAR_VISTO_BUENO", ["VERIFICADO_PENDIENTE_AUTORIZACION"], "APROBADO_PARA_DESEMBOLSO", "VISTO_BUENO_DIRECTOR", "Director autorizó; expediente derivado automáticamente a Tesorería para desembolso.")
+
+    # ==========================================================
+    # REGLA 08: Acción explícita de aprobación
+    # ==========================================================
+    @action(detail=True, methods=["post"], url_path="aprobar")
+    def aprobar(self, request, pk=None):
+        solicitud = self.get_object()
+        ok_r08, err_r08, status_r08 = validar_regla_08_aprobacion(solicitud, request.user)
+        if not ok_r08:
+            return Response({"detalle": err_r08}, status=status_r08)
+
+        if solicitud.monto_estimado and solicitud.monto_estimado > Decimal('500'):
+            cotizaciones = solicitud.cotizaciones.all()
+            if cotizaciones.count() < 3:
+                return Response(
+                    {'detalle': 'Toda compra mayor a Bs. 500 debe adjuntar tres cotizaciones de proveedores distintos antes de poder enviarse a aprobación.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            proveedores = {c.proveedor.strip().lower() for c in cotizaciones}
+            if len(proveedores) < 3:
+                return Response(
+                    {'detalle': 'Las cotizaciones deben ser de al menos tres proveedores distintos.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        if solicitud.estado == "CREADO_PENDIENTE_DAF":
+            solicitud.estado = "EVALUADO_PENDIENTE_CERTIFICACION"
+        elif solicitud.estado == "VERIFICADO_PENDIENTE_AUTORIZACION":
+            solicitud.estado = "APROBADO_PARA_DESEMBOLSO"
+        else:
+            solicitud.estado = "APROBADO"
+        solicitud.save()
+        registrar_bitacora(request=request, accion="APROBAR_COMPRA", modulo="Compras", detalle=f"{solicitud.codigo}: Aprobada por {request.user.email}", nivel="INFO")
+        return Response({
+            "ok": True,
+            "mensaje": f"Solicitud {solicitud.codigo} aprobada exitosamente por {request.user.nombre_completo or request.user.email}.",
+            "estado": solicitud.estado
+        }, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["post"], url_path="rechazar")
     def rechazar(self, request, pk=None):
