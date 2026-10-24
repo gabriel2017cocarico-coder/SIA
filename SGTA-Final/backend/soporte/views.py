@@ -1,3 +1,4 @@
+from django.db import transaction
 import os
 from usuarios.documentos import documentar, documentos_expediente, pdf_documento, validar_firma
 from datetime import timedelta
@@ -871,6 +872,51 @@ class TicketViewSet(
         }, status=status.HTTP_200_OK)
 
 
+    # ======================================================
+    # R07: ASIGNAR TÉCNICO DIRECTO CON SELECT_FOR_UPDATE
+    # ======================================================
+    @action(detail=True, methods=["post"], url_path="asignar-tecnico")
+    def asignar_tecnico(self, request, pk=None):
+        ticket = self.get_object()
+        tecnico_id = request.data.get("tecnico_id")
+        if not tecnico_id:
+            return Response({"detalle": "Debe especificar tecnico_id."}, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            try:
+                tecnico = Usuario.objects.select_for_update().get(pk=tecnico_id, is_active=True)
+            except Usuario.DoesNotExist:
+                return Response({"detalle": "El técnico no existe o está inactivo."}, status=status.HTTP_400_BAD_REQUEST)
+
+            max_tickets = int(os.environ.get("SIA_MAX_TICKETS_TECNICO", 5))
+            codigos_activos = [
+                "ABIERTO", "NUEVO", "BORRADOR",
+                "EN_PROCESO", "ASIGNADO", "EN_ANALISIS", "EN_EJECUCION", "EN_DIAGNOSTICO"
+            ]
+            activos_count = Ticket.objects.filter(
+                tecnico_asignado=tecnico,
+                estado__codigo__in=codigos_activos
+            ).exclude(id=ticket.id).count()
+
+            if activos_count >= max_tickets:
+                return Response(
+                    {"detalle": f"El técnico {tecnico.nombre_completo or tecnico.email} ya tiene el límite máximo de {max_tickets} tickets activos asignados."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            ticket.tecnico_asignado = tecnico
+            ticket.save(update_fields=["tecnico_asignado"])
+
+        return Response({
+            "ok": True,
+            "mensaje": f"Ticket {ticket.codigo} asignado exitosamente al técnico {tecnico.nombre_completo}.",
+            "tecnico_id": tecnico.id,
+            "tecnico_nombre": tecnico.nombre_completo,
+            "tickets_activos": activos_count + 1
+        }, status=status.HTTP_200_OK)
+
+
+
 
     # ======================================================
     # ANULAR TICKET
@@ -1400,14 +1446,11 @@ class TicketViewSet(
 
 
         try:
-
-            tecnico = Usuario.objects.get(
+            tecnico = Usuario.objects.select_for_update().get(
                 pk=tecnico_id,
                 is_active=True
             )
-
         except Usuario.DoesNotExist:
-
             return Response(
                 {
                     "tecnico_id": (
@@ -1415,8 +1458,26 @@ class TicketViewSet(
                         "no existe o está inactivo."
                     )
                 },
-                status=
-                    status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # R07: Validar límite máximo de 5 tickets activos por técnico
+        max_tickets = int(os.environ.get("SIA_MAX_TICKETS_TECNICO", 5))
+        codigos_activos = [
+            "ABIERTO", "NUEVO", "BORRADOR",
+            "EN_PROCESO", "ASIGNADO", "EN_ANALISIS", "EN_EJECUCION", "EN_DIAGNOSTICO"
+        ]
+        activos_count = Ticket.objects.filter(
+            tecnico_asignado=tecnico,
+            estado__codigo__in=codigos_activos
+        ).exclude(id=ticket.id).count()
+
+        if activos_count >= max_tickets:
+            return Response(
+                {
+                    "detalle": f"El técnico {tecnico.nombre_completo or tecnico.email} ya tiene el límite máximo de {max_tickets} tickets activos asignados."
+                },
+                status=status.HTTP_400_BAD_REQUEST
             )
 
 
