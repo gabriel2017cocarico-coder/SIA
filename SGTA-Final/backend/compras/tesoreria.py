@@ -31,7 +31,7 @@ def pdf_recibo(datos):
         'RECIBO DE ENTREGA DE FONDOS', 'Caja Chica - constancia para impresión y firma',
         SimpleNamespace(codigo=datos['codigo']),
         [('REQUERIMIENTO', [('Objeto de la compra', datos['titulo']), ('Área solicitante', datos['area']), ('Solicitante', datos['solicitante'])]),
-         ('ENTREGA DE FONDOS', [('Importe entregado', f"Bs. {datos['monto']}"), ('Método de desembolso', datos['metodo']), ('Nombre completo de quien recibe', datos['recibe']), ('Nombre completo de quien entrega', datos['entrega'])]),
+         ('ENTREGA DE FONDOS', [('Importe entregado', f"Bs. {datos['monto']}"), ('Saldo restante fondo', f"Bs. {datos.get('saldo_restante', '5000.00')}"), ('Método de desembolso', datos['metodo']), ('Nombre completo de quien recibe', datos['recibe']), ('Nombre completo de quien entrega', datos['entrega'])]),
          ('CONFORMIDAD', [('Declaración', 'Quien recibe declara haber recibido el importe indicado para el requerimiento identificado en este recibo.'), ('Respaldo', 'Imprimir, firmar por ambas partes y adjuntar el PDF firmado en Tesorería. Para transferencia o QR, adjuntar también el comprobante de la operación.')])],
         [('Referencia del recibo', datos['referencia']), ('Fecha de emisión', datos['fecha'])],
         unidad='TESORERÍA', espaciado=True, firmas=[([], datos['recibe'], 'Firma de quien recibe'), ([], datos['entrega'], 'Firma de quien entrega')],
@@ -61,6 +61,9 @@ def recibos(view, request):
         return Response({'detalle': 'Solo se generan recibos de expedientes pendientes de desembolso.'}, status=409)
     datos = datos_entrega(request.data)
     referencia = uuid4()
+    from .views import obtener_saldo_caja_chica
+    saldo_info = obtener_saldo_caja_chica()
+    datos['saldo_restante'] = str(saldo_info['saldo_restante'])
     datos.update(codigo=s.codigo, titulo=s.titulo, solicitante=s.solicitante.nombre_completo,
                  area=s.area.nombre if s.area_id else 'Sin área', entrega=request.user.nombre_completo,
                  usuario_entrega=request.user.pk, referencia=str(referencia),

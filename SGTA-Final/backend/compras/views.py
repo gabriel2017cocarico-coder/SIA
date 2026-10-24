@@ -1,3 +1,5 @@
+from django.db.models import Sum
+import os
 from usuarios.documentos import documentar, documentos_expediente, pdf_documento
 from rest_framework import (
     status,
@@ -67,6 +69,73 @@ def es_jefe_administrativo_usuario(usuario):
         return True
     return False
 
+
+
+
+# ==========================================================
+# REGLA 09: FONDO MENSUAL Y SALDO DISPONIBLE
+# ==========================================================
+def obtener_saldo_caja_chica():
+    fondo_mensual = Decimal(str(os.environ.get("SIA_FONDO_MENSUAL", "5000")))
+    ahora = timezone.localtime()
+    estados_aprobados = [
+        "APROBADO",
+        "APROBADO_PARA_DESEMBOLSO",
+        "DESEMBOLSADO",
+        "CON_COMPROBANTE",
+        "RENDIDO",
+        "CERRADO",
+        "FINALIZADO",
+        "EVALUADO_PENDIENTE_CERTIFICACION",
+        "VERIFICADO_PENDIENTE_AUTORIZACION",
+    ]
+    compras_mes = SolicitudCompra.objects.filter(
+        activo=True,
+        creado_en__year=ahora.year,
+        creado_en__month=ahora.month,
+        estado__in=estados_aprobados
+    )
+    total_gastado = compras_mes.aggregate(total=Sum("monto_estimado"))["total"] or Decimal("0.00")
+    saldo_restante = max(Decimal("0.00"), fondo_mensual - total_gastado)
+    return {
+        "fondo_mensual": fondo_mensual,
+        "total_gastado": total_gastado,
+        "saldo_restante": saldo_restante,
+        "mes": ahora.month,
+        "anio": ahora.year,
+    }
+
+
+def validar_saldo_disponible(monto_nuevo, excluir_solicitud_id=None):
+    info = obtener_saldo_caja_chica()
+    fondo = info["fondo_mensual"]
+    ahora = timezone.localtime()
+    estados_aprobados = [
+        "APROBADO",
+        "APROBADO_PARA_DESEMBOLSO",
+        "DESEMBOLSADO",
+        "CON_COMPROBANTE",
+        "RENDIDO",
+        "CERRADO",
+        "FINALIZADO",
+        "EVALUADO_PENDIENTE_CERTIFICACION",
+        "VERIFICADO_PENDIENTE_AUTORIZACION",
+    ]
+    qs = SolicitudCompra.objects.filter(
+        activo=True,
+        creado_en__year=ahora.year,
+        creado_en__month=ahora.month,
+        estado__in=estados_aprobados
+    )
+    if excluir_solicitud_id:
+        qs = qs.exclude(id=excluir_solicitud_id)
+
+    gastado = qs.aggregate(total=Sum("monto_estimado"))["total"] or Decimal("0.00")
+    saldo_disponible = fondo - gastado
+
+    if monto_nuevo > saldo_disponible:
+        return False, f"La compra de Bs. {monto_nuevo} excede el fondo mensual disponible de Caja Chica (Bs. {fondo}). Saldo disponible restante: Bs. {max(Decimal('0.00'), saldo_disponible)}."
+    return True, ""
 
 def validar_regla_08_aprobacion(solicitud, usuario):
     """
@@ -304,7 +373,7 @@ class SolicitudCompraViewSet(
 
 
         if self.action == 'list' and self.request.query_params.get('tesoreria') == '1' and tiene_permiso(usuario, 'REGISTRAR_DESEMBOLSO'):
-            from django.db.models import OuterRef, Subquery
+            from django.db.models import OuterRef, Subquery, Sum
             from django.db.models.functions import Coalesce
             from usuarios.models import DocumentoProceso
             from .models import ReciboTesoreria
@@ -631,6 +700,12 @@ class SolicitudCompraViewSet(
         if not ok_r08:
             return Response({"detalle": err_r08}, status=status_r08)
 
+        # R09: Validar fondo mensual disponible
+        monto_aprobacion = solicitud.monto_estimado or Decimal("0")
+        ok_r09, err_r09 = validar_saldo_disponible(monto_aprobacion, excluir_solicitud_id=solicitud.id)
+        if not ok_r09:
+            return Response({"detalle": err_r09}, status=status.HTTP_400_BAD_REQUEST)
+
         # ==========================================================
         # REGLA 02: Tres cotizaciones para compras mayores a Bs 500
         # ==========================================================
@@ -680,6 +755,12 @@ class SolicitudCompraViewSet(
         ok_r08, err_r08, status_r08 = validar_regla_08_aprobacion(solicitud, request.user)
         if not ok_r08:
             return Response({"detalle": err_r08}, status=status_r08)
+
+        # R09: Validar fondo mensual disponible
+        monto_aprobacion = solicitud.monto_estimado or Decimal("0")
+        ok_r09, err_r09 = validar_saldo_disponible(monto_aprobacion, excluir_solicitud_id=solicitud.id)
+        if not ok_r09:
+            return Response({"detalle": err_r09}, status=status.HTTP_400_BAD_REQUEST)
         return self._transicion(request, solicitud, "DAR_VISTO_BUENO", ["VERIFICADO_PENDIENTE_AUTORIZACION"], "APROBADO_PARA_DESEMBOLSO", "VISTO_BUENO_DIRECTOR", "Director autorizó; expediente derivado automáticamente a Tesorería para desembolso.")
 
     # ==========================================================
@@ -691,6 +772,12 @@ class SolicitudCompraViewSet(
         ok_r08, err_r08, status_r08 = validar_regla_08_aprobacion(solicitud, request.user)
         if not ok_r08:
             return Response({"detalle": err_r08}, status=status_r08)
+
+        # R09: Validar fondo mensual disponible
+        monto_aprobacion = solicitud.monto_estimado or Decimal("0")
+        ok_r09, err_r09 = validar_saldo_disponible(monto_aprobacion, excluir_solicitud_id=solicitud.id)
+        if not ok_r09:
+            return Response({"detalle": err_r09}, status=status.HTTP_400_BAD_REQUEST)
 
         if solicitud.monto_estimado and solicitud.monto_estimado > Decimal('500'):
             cotizaciones = solicitud.cotizaciones.all()
@@ -719,6 +806,25 @@ class SolicitudCompraViewSet(
             "mensaje": f"Solicitud {solicitud.codigo} aprobada exitosamente por {request.user.nombre_completo or request.user.email}.",
             "estado": solicitud.estado
         }, status=status.HTTP_200_OK)
+
+
+    # ==========================================================
+    # REGLA 09: ENDPOINTS DE CONSULTA DE SALDO DE CAJA CHICA
+    # ==========================================================
+    @action(detail=False, methods=["get"], url_path="saldo-mensual")
+    def saldo_mensual(self, request):
+        saldo_info = obtener_saldo_caja_chica()
+        return Response({
+            "fondo_mensual": float(saldo_info["fondo_mensual"]),
+            "total_gastado": float(saldo_info["total_gastado"]),
+            "saldo_restante": float(saldo_info["saldo_restante"]),
+            "mes": saldo_info["mes"],
+            "anio": saldo_info["anio"]
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=["get"], url_path="saldo")
+    def saldo(self, request):
+        return self.saldo_mensual(request)
 
     @action(detail=True, methods=["post"], url_path="rechazar")
     def rechazar(self, request, pk=None):
