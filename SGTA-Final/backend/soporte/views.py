@@ -433,6 +433,54 @@ class EstadoTicketViewSet(
 # TICKETS DE SOPORTE
 # ==========================================================
 
+
+# ==========================================================
+# R05: FLUJO DE ESTADOS CONTROLADO
+# ==========================================================
+
+TRANSICIONES_PERMITIDAS_R05 = {
+    "ABIERTO": ["EN_PROCESO"],
+    "EN_PROCESO": ["RESUELTO"],
+    "RESUELTO": ["CERRADO", "EN_PROCESO"],
+    "CERRADO": [],
+}
+
+def normalizar_codigo_estado(codigo):
+    c = str(codigo or "").strip().upper()
+    if c in ("NUEVO", "BORRADOR", "ABIERTO"):
+        return "ABIERTO"
+    if c in ("ASIGNADO", "EN_ANALISIS", "EN_EJECUCION", "EN_DIAGNOSTICO", "EN_PROCESO"):
+        return "EN_PROCESO"
+    if c in ("EN_VERIFICACION", "PENDIENTE_CONFORMIDAD", "RESUELTO"):
+        return "RESUELTO"
+    if c in ("CERRADO", "FINALIZADO"):
+        return "CERRADO"
+    return c
+
+def validar_transicion_estado_r05(ticket, estado_destino_obj_o_codigo, solucion_texto=""):
+    if hasattr(estado_destino_obj_o_codigo, "codigo"):
+        dest_raw = estado_destino_obj_o_codigo.codigo
+    else:
+        dest_raw = str(estado_destino_obj_o_codigo)
+
+    origen = normalizar_codigo_estado(ticket.estado.codigo)
+    destino = normalizar_codigo_estado(dest_raw)
+
+    if origen == destino:
+        return True, "", destino
+
+    permitidos = TRANSICIONES_PERMITIDAS_R05.get(origen, [])
+    if destino not in permitidos:
+        return False, f"Transición no permitida: no se puede pasar de {ticket.estado.nombre} a {dest_raw}.", destino
+
+    if destino == "RESUELTO":
+        sol = str(solucion_texto or getattr(ticket, "solucion", "") or "").strip()
+        if not sol:
+            return False, "Para pasar a Resuelto es obligatorio un comentario de solución.", destino
+
+    return True, "", destino
+
+
 class TicketViewSet(
     viewsets.ModelViewSet
 ):
@@ -728,6 +776,47 @@ class TicketViewSet(
 
 
         return respuesta
+
+
+
+
+    # ======================================================
+    # R05: CAMBIAR ESTADO CONTROLADO
+    # ======================================================
+    @action(detail=True, methods=["post"], url_path="cambiar-estado")
+    def cambiar_estado(self, request, pk=None):
+        ticket = self.get_object()
+        estado_dest = request.data.get("estado")
+        if not estado_dest:
+            return Response({"detalle": "Debe indicar el estado destino."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if str(estado_dest).isdigit():
+            obj_estado = EstadoTicket.objects.filter(id=int(estado_dest)).first()
+        else:
+            obj_estado = EstadoTicket.objects.filter(codigo__iexact=str(estado_dest)).first()
+
+        if not obj_estado:
+            return Response({"detalle": f"Estado '{estado_dest}' no encontrado."}, status=status.HTTP_400_BAD_REQUEST)
+
+        solucion = request.data.get("solucion", "")
+        valido, err, dest_norm = validar_transicion_estado_r05(ticket, obj_estado, solucion)
+        if not valido:
+            return Response({"detalle": err}, status=status.HTTP_400_BAD_REQUEST)
+
+        if solucion:
+            ticket.solucion = solucion
+        ticket.estado = obj_estado
+        if dest_norm == "CERRADO" and not ticket.cerrado_en:
+            ticket.cerrado_en = timezone.now()
+        ticket.save()
+
+        return Response({
+            "ok": True,
+            "mensaje": f"Estado cambiado exitosamente a {obj_estado.nombre}.",
+            "estado": obj_estado.codigo,
+            "estado_nombre": obj_estado.nombre,
+            "solucion": ticket.solucion,
+        }, status=status.HTTP_200_OK)
 
 
     # ======================================================
