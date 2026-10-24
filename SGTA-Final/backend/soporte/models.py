@@ -559,6 +559,12 @@ class Ticket(models.Model):
         blank=True
     )
 
+    fecha_cierre = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Fecha y hora de cierre del ticket (R06: reapertura permitida dentro de 7 días)."
+    )
+
 
     # ======================================================
     # PROPIEDADES ÚTILES

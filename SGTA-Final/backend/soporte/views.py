@@ -1,3 +1,4 @@
+import os
 from usuarios.documentos import documentar, documentos_expediente, pdf_documento, validar_firma
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
@@ -806,8 +807,10 @@ class TicketViewSet(
         if solucion:
             ticket.solucion = solucion
         ticket.estado = obj_estado
-        if dest_norm == "CERRADO" and not ticket.cerrado_en:
-            ticket.cerrado_en = timezone.now()
+        if dest_norm == "CERRADO":
+            if not ticket.cerrado_en:
+                ticket.cerrado_en = timezone.now()
+            ticket.fecha_cierre = ticket.cerrado_en
         ticket.save()
 
         return Response({
@@ -817,6 +820,56 @@ class TicketViewSet(
             "estado_nombre": obj_estado.nombre,
             "solucion": ticket.solucion,
         }, status=status.HTTP_200_OK)
+
+
+    # ======================================================
+    # R06: REAPERTURA DE TICKET DENTRO DE 7 DÍAS
+    # ======================================================
+    @action(detail=True, methods=["post"], url_path="reabrir")
+    def reabrir(self, request, pk=None):
+        ticket = self.get_object()
+        cod = normalizar_codigo_estado(ticket.estado.codigo)
+        if cod != "CERRADO":
+            return Response({
+                "detalle": "Solo se pueden reabrir tickets que se encuentren en estado Cerrado."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if not (request.user.is_staff or request.user.is_superuser or ticket.solicitante_id == request.user.id or es_admin(request.user)):
+            return Response({
+                "detalle": "Solo el solicitante original puede reabrir el ticket."
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        from datetime import timedelta
+        dias_max = int(os.environ.get("SIA_DIAS_REAPERTURA", 7))
+        cierre = ticket.fecha_cierre or ticket.cerrado_en
+        if cierre and timezone.now() > cierre + timedelta(days=dias_max):
+            return Response({
+                "detalle": f"No es posible reabrir el ticket. Ha superado el plazo máximo de {dias_max} días desde su cierre."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        est_proceso = EstadoTicket.objects.filter(codigo="EN_PROCESO").first() or EstadoTicket.objects.filter(codigo="ASIGNADO").first()
+        ticket.estado = est_proceso
+        ticket.fecha_cierre = None
+        ticket.cerrado_en = None
+        ticket.rework_count = (ticket.rework_count or 0) + 1
+        ticket.save()
+
+        registrar_bitacora(
+            request=request,
+            accion="REABRIR_TICKET",
+            modulo="Soporte Técnico",
+            detalle=f"Se reabrió el ticket {ticket.codigo} volviendo al estado En proceso.",
+            nivel="INFO"
+        )
+
+        return Response({
+            "ok": True,
+            "mensaje": f"Ticket {ticket.codigo} reabierto exitosamente.",
+            "estado": ticket.estado.codigo,
+            "estado_nombre": ticket.estado.nombre,
+            "rework_count": ticket.rework_count,
+        }, status=status.HTTP_200_OK)
+
 
 
     # ======================================================

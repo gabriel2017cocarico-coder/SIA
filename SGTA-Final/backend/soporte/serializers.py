@@ -444,6 +444,7 @@ class TicketSerializer(
             "actualizado_en",
 
             "cerrado_en",
+            "fecha_cierre",
         ]
 
 
@@ -577,6 +578,7 @@ class TicketSerializer(
             "rework_count",
 
             "cerrado_en",
+            "fecha_cierre",
 
             "creado_en",
 
