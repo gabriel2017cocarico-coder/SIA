@@ -1002,6 +1002,17 @@ class RequerimientoMantenimientoViewSet(
         except InvalidOperation:
             return Response({"costo_estimado": "Monto estimado inválido."}, status=400)
 
+        # R01: Límite de Caja Chica (SIA_LIMITE_CAJA_CHICA)
+        limite_caja_chica = Decimal(os.environ.get("SIA_LIMITE_CAJA_CHICA", "1000"))
+        if costo is not None and costo > limite_caja_chica:
+            return Response(
+                {
+                    "costo_estimado": f"El monto estimado ({costo} Bs.) excede el límite máximo permitido para Caja Chica de Bs. {limite_caja_chica}. Debe canalizarse mediante el proceso formal de adquisiciones mayores.",
+                    "detalle": f"El monto estimado ({costo} Bs.) excede el límite máximo de Caja Chica de Bs. {limite_caja_chica}. Debe canalizarse mediante el proceso formal de adquisiciones mayores."
+                },
+                status=400
+            )
+
         requerimiento.requiere_reposicion = True
         requerimiento.producto_requerido = producto
         requerimiento.especificacion_producto = str(
