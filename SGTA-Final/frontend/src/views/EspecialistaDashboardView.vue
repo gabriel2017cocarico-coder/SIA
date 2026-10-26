@@ -148,6 +148,9 @@
           </label>
           <label class="campo">Costo estimado (Bs.)
             <input v-monto inputmode="decimal" pattern="[0-9]+([.][0-9]{1,2})?" v-model="formComponente.costo_estimado" type="text" min="0" step="0.01">
+            <small v-if="Number(formComponente.costo_estimado) > 1000" style="color: #e53e3e; font-weight: 600; margin-top: 4px; display: block;">
+              ⚠️ Excede el límite de Caja Chica (máximo Bs. 1.000)
+            </small>
           </label>
           <a v-if="ordenAbierta?.informe_compra" :href="ordenAbierta.informe_compra" target="_blank">Ver informe de requerimiento generado</a>
           <label class="campo">Cotización / proforma
@@ -648,6 +651,10 @@ function datosRequerimiento() {
 }
 
 async function guardarBorrador() {
+  if (Number(formComponente.costo_estimado) > 1000) {
+    mostrarMensaje('Límite de Caja Chica excedido', 'El monto estimado (Bs. ' + formComponente.costo_estimado + ') excede el límite máximo permitido para Caja Chica de Bs. 1.000 (Regla 01).', 'error')
+    return
+  }
   try {
     await postAccion(ordenAbierta.value, 'guardar-borrador-requerimiento', datosRequerimiento(), true)
     mostrarMensaje('Borrador guardado', 'Puede salir y continuar después desde Trabajos en curso.')
@@ -655,6 +662,10 @@ async function guardarBorrador() {
 }
 
 async function enviarRequerimiento() {
+  if (Number(formComponente.costo_estimado) > 1000) {
+    mostrarMensaje('Límite de Caja Chica excedido', 'El monto estimado (Bs. ' + formComponente.costo_estimado + ') excede el límite máximo permitido para Caja Chica de Bs. 1.000 (Regla 01). Debe canalizarse mediante el proceso formal de adquisiciones mayores.', 'error')
+    return
+  }
   try {
     await postAccion(ordenAbierta.value, 'solicitar-requerimiento-componente', datosRequerimiento(), true)
     cerrarOrden()

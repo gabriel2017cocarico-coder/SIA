@@ -1874,6 +1874,17 @@ class TicketViewSet(
             ticket.costo_estimado = Decimal(str(costo)) if costo not in (None, "") else None
         except (ValueError, TypeError, InvalidOperation):
             return Response({"detalle": "Cantidad o costo estimado inválido."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # R01: Límite de Caja Chica (SIA_LIMITE_CAJA_CHICA)
+        limite_caja_chica = Decimal(os.environ.get("SIA_LIMITE_CAJA_CHICA", "1000"))
+        if ticket.costo_estimado is not None and ticket.costo_estimado > limite_caja_chica:
+            return Response(
+                {
+                    "costo_estimado": f"El monto estimado ({ticket.costo_estimado} Bs.) excede el límite máximo permitido para Caja Chica de Bs. {limite_caja_chica}. Debe canalizarse mediante el proceso formal de adquisiciones mayores.",
+                    "detalle": f"El monto estimado ({ticket.costo_estimado} Bs.) excede el límite máximo de Caja Chica de Bs. {limite_caja_chica}. Debe canalizarse mediante el proceso formal de adquisiciones mayores."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
         if request.FILES.get("informe_compra"):
             ticket.informe_compra = request.FILES["informe_compra"]
         cotizacion = request.FILES.get("cotizacion_archivo")
@@ -2010,6 +2021,23 @@ class TicketViewSet(
 
             return Response(
                 {"costo_estimado": "Monto estimado inválido."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # R01: Límite de Caja Chica (SIA_LIMITE_CAJA_CHICA)
+        limite_caja_chica = Decimal(os.environ.get("SIA_LIMITE_CAJA_CHICA", "1000"))
+        if costo_estimado is not None and costo_estimado > limite_caja_chica:
+            return Response(
+                {
+                    "costo_estimado": (
+                        f"El monto estimado ({costo_estimado} Bs.) excede el límite máximo permitido para Caja Chica de Bs. {limite_caja_chica}. "
+                        "Debe canalizarse mediante el proceso formal de adquisiciones mayores."
+                    ),
+                    "detalle": (
+                        f"El monto estimado ({costo_estimado} Bs.) excede el límite máximo de Caja Chica de Bs. {limite_caja_chica}. "
+                        "Debe canalizarse mediante el proceso formal de adquisiciones mayores."
+                    )
+                },
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -2277,6 +2305,15 @@ class TicketViewSet(
         pedido = request.FILES.get("pedido")
         if not all((informe, proforma, poa, pedido)):
             return Response({"detalle": "Para elevar a DAF se requieren informe técnico, cotización, POA y proveído de jefatura."}, status=400)
+
+        limite_caja_chica = Decimal(os.environ.get("SIA_LIMITE_CAJA_CHICA", "1000"))
+        if ticket.costo_estimado is not None and ticket.costo_estimado > limite_caja_chica:
+            return Response(
+                {
+                    "detalle": f"El monto del requerimiento ({ticket.costo_estimado} Bs.) excede el límite máximo de Caja Chica ({limite_caja_chica} Bs.). Debe canalizarse por adquisiciones mayores."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         solicitud = SolicitudCompra.objects.create(
             codigo=SolicitudCompra.generar_codigo(),
