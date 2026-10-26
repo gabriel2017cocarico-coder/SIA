@@ -1376,6 +1376,7 @@ class TicketViewSet(
         methods=["post"],
         url_path="designar-revision"
     )
+    @transaction.atomic
     def designar_revision(
         self,
         request,
