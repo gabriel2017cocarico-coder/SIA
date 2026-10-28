@@ -8,9 +8,8 @@ import re
 
 
 class MontoEstimadoField(serializers.DecimalField):
-
     def to_internal_value(self, data):
-        if not re.fullmatch(r"[0-9]+(?:\.[0-9]{1,2})?", str(data)):
+        if not re.fullmatch(r"[1-9]+(?:\.[1-9]{1,2})?", str(data)):
             raise serializers.ValidationError(
                 "Ingrese un monto numérico con hasta dos decimales."
             )
@@ -20,7 +19,6 @@ class MontoEstimadoField(serializers.DecimalField):
 # ==========================================================
 # ARCHIVOS DEL EXPEDIENTE
 # ==========================================================
-#
 # Se sirven como ruta relativa ("/media/...") en vez de URL
 # absoluta con el host interno del backend (127.0.0.1:8000),
 # que nunca es alcanzable desde fuera de esta máquina. El
@@ -52,8 +50,7 @@ class SolicitudCompraSerializer(serializers.ModelSerializer):
                 "id": receptor.pk,
                 "nombre": receptor.nombre_completo,
                 "tecnico": bool(
-                    obj.requerimiento_mantenimiento_id
-                    or obj.ticket_soporte_id
+                    obj.requerimiento_mantenimiento_id or obj.ticket_soporte_id
                 ),
             }
             if receptor
@@ -61,7 +58,11 @@ class SolicitudCompraSerializer(serializers.ModelSerializer):
         )
 
     monto_estimado = MontoEstimadoField(
-        max_digits=12, decimal_places=2, min_value=0, required=False, allow_null=True
+        max_digits=12,
+        decimal_places=2,
+        min_value=0,
+        required=False,
+        allow_null=True,
     )
 
     # El expediente dice por sí mismo de quién depende ahora: evita que
@@ -226,7 +227,7 @@ class SolicitudCompraSerializer(serializers.ModelSerializer):
     def get_responsable_actual(self, obj):
         if obj.estado == "FONDOS_DESEMBOLSADOS":
             return "Compras y Almacén"
-        return self.ETAPAS.get(obj.estado, ("", ""))[0]
+        return self.ETAPAS.get(obj.estado, ("", ""))
 
     def get_situacion(self, obj):
         """Frase corta que explica en qué punto está el trámite."""
@@ -279,9 +280,7 @@ class SolicitudCompraSerializer(serializers.ModelSerializer):
         # El "pedido" se conserva como documento opcional del expediente.
         if self.instance is None:
             faltantes = [
-                nombre
-                for nombre in ("informe", "proforma", "poa")
-                if not attrs.get(nombre)
+                nombre for nombre in ("informe", "proforma", "poa") if not attrs.get(nombre)
             ]
             if faltantes:
                 raise serializers.ValidationError(
@@ -327,11 +326,17 @@ class SolicitudCompraSerializer(serializers.ModelSerializer):
         )
 
         if via_adquisicion == "CAJA_CHICA" and monto_estimado is not None:
-            limite_env = os.getenv("SIA_LIMITE_CAJA_CHICA", "1000")
+            # ------------------------------------------------------
+            # >>> INICIO DEL CAMBIO DE EXAMEN (LÍMITE BS. 100) <<<
+            # ------------------------------------------------------
+            limite_env = os.getenv("SIA_LIMITE_CAJA_CHICA", "100")
             try:
                 limite_max = Decimal(limite_env)
             except Exception:
-                limite_max = Decimal("1000")
+                limite_max = Decimal("100")
+            # ------------------------------------------------------
+            # >>> FIN DEL CAMBIO DE EXAMEN <<<
+            # ------------------------------------------------------
 
             if Decimal(str(monto_estimado)) > limite_max:
                 raise serializers.ValidationError(
@@ -365,7 +370,7 @@ class SolicitudCompraResumenSerializer(serializers.ModelSerializer):
         data = super().to_representation(instance)
         for campo in ("informe", "proforma", "poa", "pedido"):
             if data.get(campo):
-                data[campo] = urlsplit(data[campo]).path
+                data[campo] = urlsplit(data.get(campo)).path
         return firmar_urls(data, self.context.get("request"))
 
     class Meta:

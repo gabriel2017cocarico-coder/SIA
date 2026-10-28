@@ -1876,7 +1876,7 @@ class TicketViewSet(
             return Response({"detalle": "Cantidad o costo estimado inválido."}, status=status.HTTP_400_BAD_REQUEST)
 
         # R01: Límite de Caja Chica (SIA_LIMITE_CAJA_CHICA)
-        limite_caja_chica = Decimal(os.environ.get("SIA_LIMITE_CAJA_CHICA", "1000"))
+        limite_caja_chica = Decimal(os.environ.get("SIA_LIMITE_CAJA_CHICA", "100"))
         if ticket.costo_estimado is not None and ticket.costo_estimado > limite_caja_chica:
             return Response(
                 {
@@ -2025,7 +2025,7 @@ class TicketViewSet(
             )
 
         # R01: Límite de Caja Chica (SIA_LIMITE_CAJA_CHICA)
-        limite_caja_chica = Decimal(os.environ.get("SIA_LIMITE_CAJA_CHICA", "1000"))
+        limite_caja_chica = Decimal(os.environ.get("SIA_LIMITE_CAJA_CHICA", "100"))
         if costo_estimado is not None and costo_estimado > limite_caja_chica:
             return Response(
                 {
@@ -2306,7 +2306,7 @@ class TicketViewSet(
         if not all((informe, proforma, poa, pedido)):
             return Response({"detalle": "Para elevar a DAF se requieren informe técnico, cotización, POA y proveído de jefatura."}, status=400)
 
-        limite_caja_chica = Decimal(os.environ.get("SIA_LIMITE_CAJA_CHICA", "1000"))
+        limite_caja_chica = Decimal(os.environ.get("SIA_LIMITE_CAJA_CHICA", "100"))
         if ticket.costo_estimado is not None and ticket.costo_estimado > limite_caja_chica:
             return Response(
                 {

@@ -1003,7 +1003,7 @@ class RequerimientoMantenimientoViewSet(
             return Response({"costo_estimado": "Monto estimado inválido."}, status=400)
 
         # R01: Límite de Caja Chica (SIA_LIMITE_CAJA_CHICA)
-        limite_caja_chica = Decimal(os.environ.get("SIA_LIMITE_CAJA_CHICA", "1000"))
+        limite_caja_chica = Decimal(os.environ.get("SIA_LIMITE_CAJA_CHICA", "100"))
         if costo is not None and costo > limite_caja_chica:
             return Response(
                 {
