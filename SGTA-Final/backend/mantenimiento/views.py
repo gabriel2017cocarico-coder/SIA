@@ -1007,8 +1007,8 @@ class RequerimientoMantenimientoViewSet(
         if costo is not None and costo > limite_caja_chica:
             return Response(
                 {
-                    "costo_estimado": f"El monto estimado ({costo} Bs.) excede el límite máximo permitido para Caja Chica de Bs. {limite_caja_chica}. Debe canalizarse mediante el proceso formal de adquisiciones mayores.",
-                    "detalle": f"El monto estimado ({costo} Bs.) excede el límite máximo de Caja Chica de Bs. {limite_caja_chica}. Debe canalizarse mediante el proceso formal de adquisiciones mayores."
+                    "costo_estimado": f"El monto estimado ({costo} Bs.) no puede ser mayor a {limite_caja_chica} Bs. Excede el límite de Caja Chica. Debe canalizarse mediante el proceso formal de adquisiciones mayores.",
+                    "detalle": f"El monto estimado ({costo} Bs.) no puede ser mayor a {limite_caja_chica} Bs. Excede el límite de Caja Chica. Debe canalizarse mediante el proceso formal de adquisiciones mayores."
                 },
                 status=400
             )
@@ -1106,6 +1106,13 @@ class RequerimientoMantenimientoViewSet(
         if requerimiento.estado_compra_componente != 'SOLICITADA' or requerimiento.derivado_compra:
             return Response({'detalle': 'La compra no está pendiente de validación.'}, status=400)
         from compras.informes_origen import asegurar_informe_tecnico
+        limite_caja_chica = Decimal(os.environ.get("SIA_LIMITE_CAJA_CHICA", "100"))
+        if requerimiento.costo_estimado is not None and requerimiento.costo_estimado > limite_caja_chica:
+            return Response(
+                {"detalle": f"El monto del requerimiento ({requerimiento.costo_estimado} Bs.) no puede ser mayor a {limite_caja_chica} Bs. Excede el límite de Caja Chica. Debe canalizarse por adquisiciones mayores."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         informe = asegurar_informe_tecnico(requerimiento)
         cotizacion = requerimiento.cotizacion_archivo
         if not informe or not cotizacion:

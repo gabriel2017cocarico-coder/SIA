@@ -888,7 +888,7 @@ class TicketViewSet(
             except Usuario.DoesNotExist:
                 return Response({"detalle": "El técnico no existe o está inactivo."}, status=status.HTTP_400_BAD_REQUEST)
 
-            max_tickets = int(os.environ.get("SIA_MAX_TICKETS_TECNICO", 5))
+            max_tickets = int(os.environ.get("SIA_MAX_TICKETS_TECNICO", 1))
             codigos_activos = [
                 "ABIERTO", "NUEVO", "BORRADOR",
                 "EN_PROCESO", "ASIGNADO", "EN_ANALISIS", "EN_EJECUCION", "EN_DIAGNOSTICO"
@@ -1463,7 +1463,7 @@ class TicketViewSet(
             )
 
         # R07: Validar límite máximo de 5 tickets activos por técnico
-        max_tickets = int(os.environ.get("SIA_MAX_TICKETS_TECNICO", 5))
+        max_tickets = int(os.environ.get("SIA_MAX_TICKETS_TECNICO", 1))
         codigos_activos = [
             "ABIERTO", "NUEVO", "BORRADOR",
             "EN_PROCESO", "ASIGNADO", "EN_ANALISIS", "EN_EJECUCION", "EN_DIAGNOSTICO"
@@ -1880,8 +1880,8 @@ class TicketViewSet(
         if ticket.costo_estimado is not None and ticket.costo_estimado > limite_caja_chica:
             return Response(
                 {
-                    "costo_estimado": f"El monto estimado ({ticket.costo_estimado} Bs.) excede el límite máximo permitido para Caja Chica de Bs. {limite_caja_chica}. Debe canalizarse mediante el proceso formal de adquisiciones mayores.",
-                    "detalle": f"El monto estimado ({ticket.costo_estimado} Bs.) excede el límite máximo de Caja Chica de Bs. {limite_caja_chica}. Debe canalizarse mediante el proceso formal de adquisiciones mayores."
+                    "costo_estimado": f"El monto estimado ({ticket.costo_estimado} Bs.) no puede ser mayor a {limite_caja_chica} Bs. Excede el límite de Caja Chica. Debe canalizarse mediante el proceso formal de adquisiciones mayores.",
+                    "detalle": f"El monto estimado ({ticket.costo_estimado} Bs.) no puede ser mayor a {limite_caja_chica} Bs. Excede el límite de Caja Chica. Debe canalizarse mediante el proceso formal de adquisiciones mayores."
                 },
                 status=status.HTTP_400_BAD_REQUEST
             )
@@ -2030,11 +2030,11 @@ class TicketViewSet(
             return Response(
                 {
                     "costo_estimado": (
-                        f"El monto estimado ({costo_estimado} Bs.) excede el límite máximo permitido para Caja Chica de Bs. {limite_caja_chica}. "
+                        f"El monto estimado ({costo_estimado} Bs.) no puede ser mayor a {limite_caja_chica} Bs. Excede el límite de Caja Chica. "
                         "Debe canalizarse mediante el proceso formal de adquisiciones mayores."
                     ),
                     "detalle": (
-                        f"El monto estimado ({costo_estimado} Bs.) excede el límite máximo de Caja Chica de Bs. {limite_caja_chica}. "
+                        f"El monto estimado ({costo_estimado} Bs.) no puede ser mayor a {limite_caja_chica} Bs. Excede el límite de Caja Chica. "
                         "Debe canalizarse mediante el proceso formal de adquisiciones mayores."
                     )
                 },
@@ -2310,7 +2310,7 @@ class TicketViewSet(
         if ticket.costo_estimado is not None and ticket.costo_estimado > limite_caja_chica:
             return Response(
                 {
-                    "detalle": f"El monto del requerimiento ({ticket.costo_estimado} Bs.) excede el límite máximo de Caja Chica ({limite_caja_chica} Bs.). Debe canalizarse por adquisiciones mayores."
+                    "detalle": f"El monto del requerimiento ({ticket.costo_estimado} Bs.) no puede ser mayor a {limite_caja_chica} Bs. Excede el límite de Caja Chica. Debe canalizarse por adquisiciones mayores."
                 },
                 status=status.HTTP_400_BAD_REQUEST
             )

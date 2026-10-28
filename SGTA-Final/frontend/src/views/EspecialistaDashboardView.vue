@@ -652,7 +652,7 @@ function datosRequerimiento() {
 
 async function guardarBorrador() {
   if (Number(formComponente.costo_estimado) > 100) {
-    mostrarMensaje('Límite de Caja Chica excedido', 'El monto estimado (Bs. ' + formComponente.costo_estimado + ') excede el límite máximo permitido para Caja Chica de Bs. 1.000 (Regla 01).', 'error')
+    mostrarMensaje('Límite de Caja Chica excedido', 'El monto estimado (Bs. ' + formComponente.costo_estimado + ') no puede ser mayor a 100 Bs. Excede el límite de Caja Chica (Regla 01).', 'error')
     return
   }
   try {
@@ -663,7 +663,7 @@ async function guardarBorrador() {
 
 async function enviarRequerimiento() {
   if (Number(formComponente.costo_estimado) > 100) {
-    mostrarMensaje('Límite de Caja Chica excedido', 'El monto estimado (Bs. ' + formComponente.costo_estimado + ') excede el límite máximo permitido para Caja Chica de Bs. 1.000 (Regla 01). Debe canalizarse mediante el proceso formal de adquisiciones mayores.', 'error')
+    mostrarMensaje('Límite de Caja Chica excedido', 'El monto estimado (Bs. ' + formComponente.costo_estimado + ') no puede ser mayor a 100 Bs. Excede el límite de Caja Chica (Regla 01). Debe canalizarse mediante el proceso formal de adquisiciones mayores.', 'error')
     return
   }
   try {
