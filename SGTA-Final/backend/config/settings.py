@@ -89,6 +89,7 @@ INSTALLED_APPS = [
     'mantenimiento',
     'compras',
     'recuperacion',
+    'asistente',
 ]
 
 
