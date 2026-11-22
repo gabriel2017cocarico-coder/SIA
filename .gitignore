@@ -1,0 +1,32 @@
+# Ambientes virtuales y dependencias
+__pycache__/
+*.py[cod]
+*$py.class
+node_modules/
+.venv/
+venv/
+env/
+dist/
+
+# Archivos de depuración y scripts temporales de desarrollo
+scratch/
+*.png
+*.jpg
+*.jpeg
+*.wav
+*.mp3
+*.tar.gz
+*.log
+*.tmp
+*.sqlite3
+
+# Scripts de automatización y pruebas locales en la raíz
+/*.py
+/*.ps1
+/*.sh
+/*.html
+/*.txt
+/*.json
+
+# Excepciones si las hubiera
+!.gitignore

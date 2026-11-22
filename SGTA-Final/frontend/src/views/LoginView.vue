@@ -38,7 +38,7 @@
 
         <p>
           Ingrese sus credenciales institucionales
-          para acceder al sistema.
+          para acceder al sistema. - Version 2
         </p>
 
       </div>
@@ -166,6 +166,31 @@
           }}
         </button>
 
+
+        <!-- ==========================
+             DIVISOR
+        =========================== -->
+        <div class="login-divider">
+          <span>o</span>
+        </div>
+
+
+        <!-- ==========================
+             BOTÓN LOGIN FACIAL
+        =========================== -->
+        <button
+          type="button"
+          class="login-facial-button"
+          :disabled="cargando"
+          @click="iniciarLoginFacial"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="face-icon">
+            <circle cx="12" cy="8" r="4"/>
+            <path d="M4 20c0-4 4-6 8-6s8 2 8 6"/>
+          </svg>
+          Ingresar con reconocimiento facial
+        </button>
+
       </form>
 
 
@@ -185,6 +210,38 @@
       </footer>
 
     </section>
+
+
+    <!-- ==========================
+         MODAL 2FA FACIAL
+    =========================== -->
+
+    <!-- MODAL 2FA FACIAL (después de contraseña) -->
+    <!-- MODAL 2FA FACIAL (después de contraseña) -->
+    <div v-if="mostrar2FA" class="modal-2fa-wrapper">
+      <FaceCaptureModal
+        :titulo="`Verificación facial - ${nombreUsuario}`"
+        modo="verify"
+        @cerrar="cancelar2FA"
+        @capturas="verificarRostro"
+      />
+      <div class="opcion-omitir-2fa">
+        <button type="button" class="btn-omitir-facial" @click="entrarSoloPassword">
+          🔑 Omitir y entrar directamente con contraseña
+        </button>
+      </div>
+    </div>
+
+
+    <!-- MODAL LOGIN FACIAL DIRECTO -->
+    <FaceCaptureModal
+      v-if="mostrarLoginFacial"
+      titulo="Ingresar con reconocimiento facial"
+      modo="verify"
+      @cerrar="cancelarLoginFacial"
+      @capturas="ejecutarLoginFacial"
+    />
+
   </main>
 </template>
 
@@ -196,6 +253,8 @@ import { ref } from 'vue'
 import {
   useRouter
 } from 'vue-router'
+
+import FaceCaptureModal from '../components/FaceCaptureModal.vue'
 
 
 const router = useRouter()
@@ -221,6 +280,24 @@ const mostrarPassword = ref(false)
 const mensaje = ref('')
 
 const cargando = ref(false)
+
+
+/* ==============================
+   ESTADO 2FA FACIAL
+============================== */
+
+const mostrar2FA = ref(false)
+
+const faceToken = ref('')
+
+const nombreUsuario = ref('')
+
+
+/* ==============================
+   ESTADO LOGIN FACIAL DIRECTO
+============================== */
+
+const mostrarLoginFacial = ref(false)
 
 
 /* ==============================
@@ -317,6 +394,20 @@ async function iniciarSesion() {
 
 
     /* ------------------------------
+       2FA FACIAL REQUERIDO
+    ------------------------------ */
+
+    if (datos.requires_2fa) {
+
+      faceToken.value = datos.face_token
+      nombreUsuario.value = datos.usuario.nombre
+      mostrar2FA.value = true
+
+      return
+    }
+
+
+    /* ------------------------------
        GUARDAR TOKEN
     ------------------------------ */
 
@@ -373,119 +464,10 @@ async function iniciarSesion() {
 
 
     /* ------------------------------
-       OBTENER ROLES
+       REDIRECCIÓN POR ROL
     ------------------------------ */
 
-    const codigosRoles =
-      Array.isArray(
-        datos.usuario.roles
-      )
-        ? datos.usuario.roles.map(
-            rol => rol.codigo
-          )
-        : []
-
-
-    /* ------------------------------
-       ADMIN
-    ------------------------------ */
-
-    if (
-      codigosRoles.includes(
-        'ADMIN'
-      )
-    ) {
-
-      router.push(
-        '/admin/dashboard'
-      )
-
-      return
-    }
-
-    if (codigosRoles.includes('JEFE_UTIC')) {
-      router.push('/jefe-utic/dashboard')
-      return
-    }
-
-    if (codigosRoles.includes('ESPECIALISTA')) {
-      router.push('/especialista/dashboard')
-      return
-    }
-
-    if (codigosRoles.includes('SERVICIOS_GENERALES')) {
-      router.push('/servicios-generales/dashboard')
-      return
-    }
-
-    if (codigosRoles.includes('AUXILIAR_SERVICIOS_GENERALES')) {
-      router.push('/auxiliar-servicios-generales/dashboard')
-      return
-    }
-
-    if (codigosRoles.includes('TESORERIA')) {
-      router.push('/tesoreria/dashboard')
-      return
-    }
-
-    if (codigosRoles.includes('ENCARGADO_COMPRAS_ALMACEN')) {
-      router.push('/almacen/dashboard')
-      return
-    }
-
-    if (codigosRoles.includes('DAF')) {
-      router.push('/daf/dashboard')
-      return
-    }
-
-
-    /* ------------------------------
-       AGENTE / TÉCNICO
-    ------------------------------ */
-
-    if (
-      codigosRoles.includes(
-        'AGENTE'
-      )
-    ) {
-
-      router.push(
-        '/tecnico/dashboard'
-      )
-
-      return
-    }
-
-
-    /* ------------------------------
-       SUPERVISOR / APROBADOR
-    ------------------------------ */
-
-    if (
-      codigosRoles.includes(
-        'SUPERVISOR_AREA'
-      )
-      ||
-      codigosRoles.includes(
-        'APROBADOR'
-      )
-    ) {
-
-      router.push(
-        '/supervisor/dashboard'
-      )
-
-      return
-    }
-
-
-    /* ------------------------------
-       SOLICITANTE
-    ------------------------------ */
-
-    router.push(
-      '/usuario/dashboard'
-    )
+    redirigirPorRol(datos.usuario)
 
   } catch (error) {
 
@@ -522,6 +504,403 @@ if (emailRecordado) {
 
   recordarme.value =
     true
+}
+
+
+/* ==============================
+   VERIFICACIÓN FACIAL (2FA)
+============================== */
+
+async function verificarRostro(capturas) {
+
+  cargando.value = true
+  mensaje.value = ''
+
+
+  try {
+
+    const respuesta =
+      await fetch(
+        '/api/usuarios/face-verify/',
+        {
+
+          method: 'POST',
+
+          headers: {
+            'Content-Type':
+              'application/json',
+          },
+
+          body:
+            JSON.stringify({
+
+              face_token:
+                faceToken.value,
+
+              frames:
+                capturas,
+
+            }),
+
+        }
+      )
+
+
+    const datos =
+      await respuesta.json()
+
+
+    /* ------------------------------
+       ERROR VERIFICACIÓN
+    ------------------------------ */
+
+    if (!respuesta.ok) {
+
+      mensaje.value =
+        datos.mensaje
+        ||
+        'Verificación facial fallida.'
+
+      mostrar2FA.value = false
+
+      return
+    }
+
+
+    /* ------------------------------
+       VERIFICACIÓN EXITOSA
+    ------------------------------ */
+
+    localStorage.setItem(
+      'sigta_token',
+      datos.token
+    )
+
+
+    localStorage.setItem(
+      'sigta_usuario',
+      JSON.stringify(
+        datos.usuario
+      )
+    )
+
+
+    mostrar2FA.value = false
+
+
+    /* ------------------------------
+       CAMBIO OBLIGATORIO
+    ------------------------------ */
+
+    if (
+      datos.usuario
+        .must_change_password
+    ) {
+
+      router.push(
+        '/cambiar-contrasena'
+      )
+
+      return
+    }
+
+
+    /* ------------------------------
+       REDIRECCIÓN POR ROL
+    ------------------------------ */
+
+    redirigirPorRol(datos.usuario)
+
+
+  } catch (error) {
+
+    console.error(
+      'Error verificación facial:',
+      error
+    )
+
+
+    mensaje.value =
+      'Error de conexión con el servidor.'
+
+    mostrar2FA.value = false
+
+  } finally {
+
+    cargando.value = false
+  }
+}
+
+
+/* ==============================
+   CANCELAR 2FA
+============================== */
+
+function cancelar2FA() {
+
+  mostrar2FA.value = false
+  faceToken.value = ''
+  nombreUsuario.value = ''
+  mensaje.value = 'Verificación cancelada.'
+}
+
+
+/* ==============================
+   LOGIN FACIAL DIRECTO
+============================== */
+
+function iniciarLoginFacial() {
+
+  mensaje.value = ''
+
+  // Validar que haya ingresado el correo
+  if (!email.value.trim()) {
+    mensaje.value = 'Ingrese su correo para usar reconocimiento facial.'
+    return
+  }
+
+  mostrarLoginFacial.value = true
+}
+
+
+function cancelarLoginFacial() {
+
+  mostrarLoginFacial.value = false
+  mensaje.value = ''
+}
+
+
+async function ejecutarLoginFacial(capturas) {
+
+  cargando.value = true
+  mensaje.value = ''
+
+
+  try {
+
+    const respuesta =
+      await fetch(
+        '/api/usuarios/face-login/',
+        {
+
+          method: 'POST',
+
+          headers: {
+            'Content-Type':
+              'application/json',
+          },
+
+          body:
+            JSON.stringify({
+
+              email:
+                email.value
+                  .trim()
+                  .toLowerCase(),
+
+              frames:
+                capturas,
+
+            }),
+
+        }
+      )
+
+
+    const datos =
+      await respuesta.json()
+
+
+    /* ------------------------------
+       ERROR LOGIN FACIAL
+    ------------------------------ */
+
+    if (!respuesta.ok) {
+
+      mensaje.value =
+        datos.mensaje
+        ||
+        'No se pudo ingresar con reconocimiento facial.'
+
+      mostrarLoginFacial.value = false
+
+      return
+    }
+
+
+    /* ------------------------------
+       LOGIN EXITOSO
+    ------------------------------ */
+
+    localStorage.setItem(
+      'sigta_token',
+      datos.token
+    )
+
+
+    localStorage.setItem(
+      'sigta_usuario',
+      JSON.stringify(
+        datos.usuario
+      )
+    )
+
+
+    mostrarLoginFacial.value = false
+
+
+    /* ------------------------------
+       CAMBIO OBLIGATORIO
+    ------------------------------ */
+
+    if (
+      datos.usuario
+        .must_change_password
+    ) {
+
+      router.push(
+        '/cambiar-contrasena'
+      )
+
+      return
+    }
+
+
+    /* ------------------------------
+       REDIRECCIÓN POR ROL
+    ------------------------------ */
+
+    redirigirPorRol(datos.usuario)
+
+
+  } catch (error) {
+
+    console.error(
+      'Error login facial:',
+      error
+    )
+
+
+    mensaje.value =
+      'Error de conexión con el servidor.'
+
+    mostrarLoginFacial.value = false
+
+  } finally {
+
+    cargando.value = false
+  }
+}
+
+
+/* ==============================
+   REDIRECCIÓN POR ROL
+============================== */
+
+function redirigirPorRol(usuario) {
+
+  const codigosRoles =
+    Array.isArray(usuario.roles)
+      ? usuario.roles.map(rol => rol.codigo)
+      : []
+
+  if (codigosRoles.includes('ADMIN')) {
+    router.push('/admin/dashboard')
+    return
+  }
+
+  if (codigosRoles.includes('JEFE_UTIC')) {
+    router.push('/jefe-utic/dashboard')
+    return
+  }
+
+  if (codigosRoles.includes('ESPECIALISTA')) {
+    router.push('/especialista/dashboard')
+    return
+  }
+
+  if (codigosRoles.includes('SERVICIOS_GENERALES')) {
+    router.push('/servicios-generales/dashboard')
+    return
+  }
+
+  if (codigosRoles.includes('AUXILIAR_SERVICIOS_GENERALES')) {
+    router.push('/auxiliar-servicios-generales/dashboard')
+    return
+  }
+
+  if (codigosRoles.includes('TESORERIA')) {
+    router.push('/tesoreria/dashboard')
+    return
+  }
+
+  if (codigosRoles.includes('ENCARGADO_COMPRAS_ALMACEN')) {
+    router.push('/almacen/dashboard')
+    return
+  }
+
+  if (codigosRoles.includes('DAF')) {
+    router.push('/daf/dashboard')
+    return
+  }
+
+  if (codigosRoles.includes('AGENTE')) {
+    router.push('/tecnico/dashboard')
+    return
+  }
+
+  if (
+    codigosRoles.includes('SUPERVISOR_AREA')
+    ||
+    codigosRoles.includes('APROBADOR')
+  ) {
+    router.push('/supervisor/dashboard')
+    return
+  }
+
+  router.push('/usuario/dashboard')
+}
+
+
+/* ==============================
+   LOGIN DIRECTO SOLO PASSWORD (OMITIR 2FA)
+============================== */
+async function entrarSoloPassword() {
+  mostrar2FA.value = false
+  cargando.value = true
+  mensaje.value = ''
+
+  try {
+    const respuesta = await fetch('/api/usuarios/login/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: email.value.trim().toLowerCase(),
+        password: password.value,
+        skip_2fa: true
+      })
+    })
+
+    const datos = await respuesta.json()
+    if (!respuesta.ok) {
+      mensaje.value = datos.mensaje || 'No se pudo iniciar sesión.'
+      return
+    }
+
+    localStorage.setItem('sigta_token', datos.token)
+    localStorage.setItem('sigta_usuario', JSON.stringify(datos.usuario))
+
+    if (datos.usuario.must_change_password) {
+      router.push('/cambiar-contrasena')
+      return
+    }
+
+    redirigirPorRol(datos.usuario)
+  } catch (error) {
+    mensaje.value = 'Error al comunicarse con el servidor.'
+  } finally {
+    cargando.value = false
+  }
 }
 
 </script>
@@ -1043,6 +1422,107 @@ if (emailRecordado) {
 
 
 /* ==========================
+   DIVISOR
+========================== */
+
+.login-divider {
+
+  display: flex;
+
+  align-items: center;
+
+  gap: 12px;
+
+  margin: 15px 0;
+}
+
+
+.login-divider::before,
+.login-divider::after {
+
+  content: '';
+
+  flex: 1;
+
+  height: 1px;
+
+  background: var(--sigta-borde);
+}
+
+
+.login-divider span {
+
+  color: var(--sigta-texto-suave);
+
+  font-size: 13px;
+
+  font-weight: 600;
+}
+
+
+/* ==========================
+   BOTÓN LOGIN FACIAL
+========================== */
+
+.login-facial-button {
+
+  width: 100%;
+
+  height: 45px;
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: center;
+
+  gap: 10px;
+
+  border: 2px solid var(--sigta-azul);
+
+  border-radius: 8px;
+
+  background: transparent;
+
+  color: var(--sigta-azul);
+
+  font-size: 14px;
+
+  font-weight: 700;
+
+  cursor: pointer;
+
+  transition:
+    background .2s,
+    color .2s;
+}
+
+
+.login-facial-button:hover:not(:disabled) {
+
+  background: var(--sigta-azul);
+
+  color: var(--sigta-blanco);
+}
+
+
+.login-facial-button:disabled {
+
+  opacity: .6;
+
+  cursor: not-allowed;
+}
+
+
+.login-facial-button .face-icon {
+
+  width: 20px;
+
+  height: 20px;
+}
+
+
+/* ==========================
    FOOTER
 ========================== */
 
@@ -1278,5 +1758,38 @@ footer span {
 
 }
 
+
+
+.modal-2fa-wrapper {
+  position: relative;
+  z-index: 10000;
+}
+
+.opcion-omitir-2fa {
+  position: fixed;
+  bottom: 25px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10001;
+}
+
+.btn-omitir-facial {
+  background: #ffffff;
+  color: var(--sigta-azul, #0b5795);
+  border: 2px solid var(--sigta-azul, #0b5795);
+  padding: 10px 22px;
+  border-radius: 25px;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.25);
+  transition: all 0.2s ease;
+}
+
+.btn-omitir-facial:hover {
+  background: var(--sigta-azul, #0b5795);
+  color: #ffffff;
+  transform: scale(1.03);
+}
 
 </style>

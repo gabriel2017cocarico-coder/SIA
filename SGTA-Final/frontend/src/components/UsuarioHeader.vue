@@ -52,6 +52,16 @@
             <dd>{{ perfil.rol_nombre || '—' }}</dd>
           </div>
         </dl>
+
+        <div style="margin-top: 15px; padding-top: 12px; border-top: 1px solid var(--sigta-borde, #e2e8f0); text-align: center;">
+          <router-link
+            to="/usuario/perfil"
+            style="display: inline-block; padding: 8px 16px; background: var(--sigta-azul, #0b5795); color: #fff; text-decoration: none; border-radius: 6px; font-weight: 700; font-size: 13px;"
+            @click="panelAbierto = false"
+          >
+            ⚙️ Gestionar Perfil y Reconocimiento Facial
+          </router-link>
+        </div>
       </div>
     </section>
   </div>
