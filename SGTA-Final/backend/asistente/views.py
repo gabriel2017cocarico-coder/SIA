@@ -228,17 +228,11 @@ class ChatAsistenteView(APIView):
             return Response(payload, status=status.HTTP_200_OK)
 
         intencion_navegar = bool(re.search(
-
-            r"\b(?:llev\w*|navega\w*|ir|entra\w*|abre\w*|accede\w*|muestra\w*|dirige\w*|manda\w*|pasa\w*|ver|consulta\w*|revisa\w*|busca\w*|ensena\w*|mira\w*)\b",
-
+            r"\b(?:llev\w*|navega\w*|ir|entra\w*|abr\w*|accede\w*|muestra\w*|dirige\w*|manda\w*|pasa\w*|ver|consulta\w*|revisa\w*|busca\w*|ensena\w*|mira\w*)\b",
             texto,
-
         )) or any(x in texto for x in (
-
             "quiero ir", "quiero entrar", "quiero ver", "puedes llevar",
-
             "donde veo", "donde encuentro", "como llego", "mi inicio", "mi panel",
-
         ))
 
         if intencion_navegar:
@@ -293,7 +287,7 @@ class ChatAsistenteView(APIView):
 
                 respuesta_navegacion = "Abriendo tu perfil."
 
-            elif any(x in texto for x in ("notificaciones", "avisos")):
+            elif any(x in texto for x in ("notificaciones", "notificacion", "avisos", "aviso")):
 
                 destino = "/usuario/notificaciones" if "SOLICITANTE" in roles else ruta_inicio
 
@@ -313,7 +307,7 @@ class ChatAsistenteView(APIView):
 
                 respuesta_navegacion = "Abriendo el módulo de compras."
 
-            elif any(x in texto for x in ("soporte", "tickets", "ticket", "utic")):
+            elif any(x in texto for x in ("soporte", "soporte tecnico", "tickets", "ticket", "utic")):
 
                 destino = {
 

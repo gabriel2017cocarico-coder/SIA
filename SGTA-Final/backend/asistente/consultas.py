@@ -213,9 +213,9 @@ class ConsultasConversacionales:
 
 
     @staticmethod
-
     def _es_conteo(texto):
-
+        if re.search(r"\b(?:en cuant[oa]s dias|cuant[oa]s dias|cuantas cotizaciones|puede tener|un especialista|asignad[oa]s? un especialista)\b", texto):
+            return False
         return bool(re.search(r"\b(?:cuant[oa]s?|cantidad|total|numero de)\b", texto))
 
 
